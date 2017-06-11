@@ -11,7 +11,11 @@ struct vim_opt{
 	int is_d;
 };
 
-int init_opt(struct vim_opt *opt);
-int parsing_vim(int argc, char* argv[], struct vim_opt *opt);
+int init_opt();
+int parsing_vim(int argc, char* argv[]);
+int findOfm(void);
+int check(char * status);
+void signalHandler1(int signo);
+void signalHandler2(int signo);
 
 #endif

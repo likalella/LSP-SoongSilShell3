@@ -11,7 +11,10 @@ struct ofm_opt{
 	char *directory;
 };
 
-int init_opt(struct ofm_opt *);
-int parsing_ofm(int argc, char* argv[], struct ofm_opt *);
+int init_opt();
+int parsing_ofm(int argc, char* argv[]);
+void signalHandler1(int singno, siginfo_t *info, void *context);
+void signalHandler2(int singno, siginfo_t *info, void *context);
+
 
 #endif
