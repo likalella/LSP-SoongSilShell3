@@ -20,7 +20,11 @@ int f_fd;
 int q_start;
 int q_num;
 int q_wait;
+int buflen;
+char buf[1024];
 char *filename;
+char *LOG_FILE;
+char *ssu_logfile = "ssu_log.txt";
 char *FIFO_NAME = "ssu_fifofile";
 
 int main(int argc, char *argv[])
@@ -45,7 +49,6 @@ int main(int argc, char *argv[])
 		exit(1);
 	}
 
-	printf("number : %d\n", opt.number);
 	queue = (int *)malloc(opt.number);
 	qfd = (int *)malloc(opt.number);
 
@@ -71,7 +74,17 @@ int main(int argc, char *argv[])
 		close(i);
 	umask(0);
 	//chdir("/");
-	if((fd = open("ssu_log.txt", O_RDWR|O_CREAT|O_TRUNC, 0644)) < 0){
+
+	if(opt.is_p > 0){
+		LOG_FILE = (char *)malloc(buflen+12);
+		strcpy(LOG_FILE, buf);
+		strcat(LOG_FILE, ssu_logfile);
+	}
+	else{
+		LOG_FILE = ssu_logfile;
+	}
+
+	if((fd = open(LOG_FILE, O_RDWR|O_CREAT|O_TRUNC, 0644)) < 0){
 		// check open() err
 		fprintf(stderr, "can't open 'ssu_log.txt'\n");
 		exit(1);
@@ -81,11 +94,6 @@ int main(int argc, char *argv[])
 
 	// always exist filename, except delete force
 	filename = argv[1];
-	if((fd2 = open(filename, O_RDWR|O_CREAT, 0644)) < 0){
-		// check open() err
-		fprintf(stderr, "can't open file '%s'\n", filename);
-		exit(1);
-	}
 
 	if(opt.is_t > 0){
 		time(&rawtime);
@@ -102,9 +110,9 @@ int main(int argc, char *argv[])
 	fflush(stdout);
 
 	sig_act1.sa_flags = SA_SIGINFO;
-	sig_act1.sa_handler = signalHandler1;
+	sig_act1.sa_sigaction = signalHandler1;
 	sig_act2.sa_flags = SA_SIGINFO;
-	sig_act2.sa_handler = signalHandler2;
+	sig_act2.sa_sigaction = signalHandler2;
 
 	sigemptyset(&sig_act1.sa_mask);
 	if((rst = sigaction(SIGUSR1, &sig_act1, NULL)) != 0){
@@ -136,21 +144,33 @@ int main(int argc, char *argv[])
 }
 
 void signalHandler1(int singno, siginfo_t *info, void *context){
+	int fd, length;
 	time_t rawtime;
 	struct tm *timeinfo;
 	char date[20];
+	char b[1024];
 	struct passwd *pw;
-	// Do i Access?
-	// GET File name
+	mkfifo(FIFO_NAME, 0644);
+	if((fd = open(FIFO_NAME, O_RDONLY)) < 0){
+		fprintf(stderr, "open() err\n");
+		exit(1);
+	}
+	fflush(stdout);
+	if((length = read(fd, b, 1024)) == -1){
+		fprintf(stderr, "read() err\n");
+		exit(1);
+	}
+	b[length] = '\0';
+
 	if(opt.is_t > 0){
 		time(&rawtime);
 		timeinfo = localtime(&rawtime);
 		strftime(date, 20, "%Y-%m-%d %H:%M:%S", timeinfo);
 		printf("[%s] ", date);
 	}
-	printf("Request Process ID : %d, Request Filename : ____\n", info->si_pid);
+	printf("Request Process ID : %d, Request Filename : %s\n", info->si_pid, b);
 	if(opt.is_id > 0){
-		if((pw = getpwuid(info->si_pid)) == NULL){
+		if((pw = getpwuid(info->si_uid)) == NULL){
 			fprintf(stderr, "getpwuid() err\n");
 			exit(1);
 		}
@@ -177,8 +197,47 @@ void signalHandler1(int singno, siginfo_t *info, void *context){
 }
 
 void signalHandler2(int singno, siginfo_t *info, void *context){
+	char date[22];
+	time_t rawtime;
+	struct tm *timeinfo;
+	FILE *fp1, *fp2;
+	char * newfile;
+	char c;
+	
 	// Fin!
 	printf("Finished Process ID : %d\n", info->si_pid);
+	if(opt.is_l > 0){
+		time(&rawtime);
+		timeinfo = localtime(&rawtime);
+		strftime(date, 22, "[%Y-%m-%d %H:%M:%S]", timeinfo);
+
+		if(opt.is_p > 0){
+			newfile = (char *)malloc(buflen + 22);
+			strcpy(newfile, buf);
+			strcat(newfile, date);
+		}
+		else{
+			newfile = date;
+		}
+
+		if((fp1 = fopen(LOG_FILE, "r")) == NULL){	// check fopen() err
+			fprintf(stderr, "open err\n");
+			exit(1);
+		}
+
+		if((fp2 = fopen(newfile, "w")) == NULL){	// check fopen() err
+			fprintf(stderr, "open err\n");
+			exit(1);
+		}
+
+		while((c = getc(fp1)) != EOF){
+			putc(c, fp2);
+		}
+
+		fclose(fp1);
+		fclose(fp2);
+		free(newfile);
+	}
 	q_wait = 0;
 }
 
@@ -197,6 +256,9 @@ int init_opt(){
 
 int parsing_ofm(int argc, char* argv[]){
 	int i, len, rst;
+	int length1, length2;
+	struct stat statbuf;
+	char *str;
 	for(i=2; i<argc; i++){
 		len = strlen(argv[i]);
 		if((len >=  2) && argv[i][0] == '-'){
@@ -229,6 +291,80 @@ int parsing_ofm(int argc, char* argv[]){
 						opt.is_p = 1;
 						if(++i < argc && argv[i][0] != '-'){
 							opt.directory = argv[i];
+							if((rst = access(opt.directory, F_OK)) == -1){
+								if(opt.directory[0] == '/'){
+									buf[0] = '/';
+									buf[1] = '\0';
+								}
+								str = strtok(opt.directory, "/");
+								strcat(buf, str);
+								strcat(buf, "/");
+								if((rst = access(buf, F_OK)) == -1){
+									if((rst = mkdir(buf, 0644)) < 0){
+										fprintf(stderr, "mkdir() err\n");
+										exit(1);
+									}
+								}
+								while(1){
+									i++;
+									str = strtok(NULL, "/");
+									if(str == NULL) break;
+									strcat(buf, str);
+									strcat(buf, "/");
+									if((rst = access(buf, F_OK)) == -1){
+										if((rst = mkdir(buf, 0644)) < 0){
+											fprintf(stderr, "mkdir() err\n");
+											exit(1);
+										}
+									}
+								}
+							}
+							else if(rst == 0){
+								if((rst = stat(opt.directory, &statbuf)) < 0){
+									fprintf(stderr, "stat() err\n");
+									exit(1);
+								}
+								if(S_ISDIR(statbuf.st_mode)){
+									// 맨 끝이 /인지 확인. /가 아니면 추가해준다
+									strcpy(buf, opt.directory);
+									len = strlen(buf);
+									if(buf[len-1] != '/'){
+										buf[len] = '/';
+										buf[len+1] = '\0';
+									}
+								}
+								else{
+									//경로를 생성해준다.
+									if(opt.directory[0] == '/'){
+										buf[0] = '/';
+										buf[1] = '\0';
+									}
+									str = strtok(opt.directory, "/");
+									strcat(buf, str);
+									strcat(buf, "/");
+									if((rst = access(buf, F_OK)) == -1){
+										if((rst = mkdir(buf, 0644)) < 0){
+											fprintf(stderr, "mkdir() err\n");
+											exit(1);
+										}
+									}
+									while(1){
+										i++;
+										str = strtok(NULL, "/");
+										if(str == NULL) break;
+										strcat(buf, str);
+										strcat(buf, "/");
+										if((rst = access(buf, F_OK)) == -1){
+											if((rst = mkdir(buf, 0644)) < 0){
+												fprintf(stderr, "mkdir() err\n");
+												exit(1);
+											}
+										}
+									}
+								}
+							}
+
+							buflen = strlen(buf);
 						}
 						else
 							return -1;

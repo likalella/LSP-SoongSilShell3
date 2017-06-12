@@ -203,13 +203,11 @@ int main(int argc, char* argv[]){
 
 		//TODO wirte FIFO
 		mkfifo(FIFO_NAME, 0644);
-		printf("wait reader\n");
 		if((fd = open(FIFO_NAME, O_WRONLY)) < 0){
 			fprintf(stderr, "open() err\n");
 			exit(1);
 		}
-		printf("reader connected\n");
-		if((len = write(fd, argv[1], strlen(argv[1])-1)) == -1){
+		if((len = write(fd, argv[1], strlen(argv[1]))) == -1){
 			fprintf(stderr, "write() err\n");
 			exit(1);
 		}
@@ -226,8 +224,6 @@ int main(int argc, char* argv[]){
 			else
 				printf("Waiting for Token...%s\n", argv[1]);
 		}
-
-
 	}
 	else if(opt.type == READWRITE){
 		if((fp = fopen(argv[1], "r")) == NULL){	// check fopen() err;
@@ -248,10 +244,45 @@ int main(int argc, char* argv[]){
 				ans[i] = tolower(ans[i]);
 
 			if(((strcmp(ans, "yes")) == 0) || ((strcmp(ans, "y")) == 0)){
-				// TODO writeonly
+				// check ofm executed
+				if((pid = findOfm()) < 0){
+					// no ssu_ofm
+					printf("where is ssu_ofm?\n");
+					printf("ssu_vim error\n");
+					fprintf(stderr, "ssu_vim can not be executed before ssu_ofm is executed\n");
+					exit(1);
+				}
 
+				if((rst = kill(pid, SIGUSR1)) < 0){
+					// check kill() err
+					printf("ssu_vim error\n");
+					fprintf(stderr, "kill() to process %d err\n", pid);
+					exit(1);
+				}
 
+				//TODO wirte FIFO
+				mkfifo(FIFO_NAME, 0644);
+				if((fd = open(FIFO_NAME, O_WRONLY)) < 0){
+					fprintf(stderr, "open() err\n");
+					exit(1);
+				}
+				if((len = write(fd, argv[1], strlen(argv[1]))) == -1){
+					fprintf(stderr, "write() err\n");
+					exit(1);
+				}
 
+				while(1){
+					// 1sec print
+					sleep(1);
+					if(opt.is_t > 0){
+						time(&rawtime);
+						timeinfo = localtime(&rawtime);
+						strftime(date, 20, "%Y-%m-%d %H:%M:%S", timeinfo);
+						printf("Waiting for Token...%s[%s]\n", argv[1], date);
+					}
+					else
+						printf("Waiting for Token...%s\n", argv[1]);
+				}
 				break;
 			}
 			else if(((strcmp(ans, "no")) == 0) || ((strcmp(ans, "n")) == 0)){
