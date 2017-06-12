@@ -52,6 +52,13 @@ int main(int argc, char *argv[])
 	queue = (int *)malloc(opt.number);
 	qfd = (int *)malloc(opt.number);
 
+	// always exist filename, except delete force
+	filename = argv[1];
+	if(access(filename, F_OK) == -1){
+		fprintf(stderr, "There is no %s, can't manage %s\n", filename, filename);
+		exit(1);
+	}
+
 	printf("Daemon Process Initialization.\n");
 
 	// make daemon
@@ -76,7 +83,7 @@ int main(int argc, char *argv[])
 	//chdir("/");
 
 	if(opt.is_p > 0){
-		LOG_FILE = (char *)malloc(buflen+12);
+		LOG_FILE = (char *)malloc(buflen+15);
 		strcpy(LOG_FILE, buf);
 		strcat(LOG_FILE, ssu_logfile);
 	}
@@ -91,9 +98,6 @@ int main(int argc, char *argv[])
 	}
 	dup(0);
 	dup(0);
-
-	// always exist filename, except delete force
-	filename = argv[1];
 
 	if(opt.is_t > 0){
 		time(&rawtime);
@@ -161,6 +165,7 @@ void signalHandler1(int singno, siginfo_t *info, void *context){
 		exit(1);
 	}
 	b[length] = '\0';
+	close(fd);
 
 	if(opt.is_t > 0){
 		time(&rawtime);
@@ -179,10 +184,14 @@ void signalHandler1(int singno, siginfo_t *info, void *context){
 
 	fflush(stdout);
 
-	// ## Report
+	if(strcmp(filename, b) != 0){
+		printf("%s is not shared file.\n", b);
+		kill(info->si_pid, SIGUSR2);
+		return;
+	}
 	if(q_num == opt.number){
 		printf("Queue is Full, Can't be inserted : %d\n", info->si_pid);
-		kill(info->si_pid, SIGUSR2);
+		kill(info->si_pid, SIGKILL);
 		return;
 	}
 	
@@ -236,7 +245,8 @@ void signalHandler2(int singno, siginfo_t *info, void *context){
 
 		fclose(fp1);
 		fclose(fp2);
-		free(newfile);
+		if(opt.is_p > 0)
+			free(newfile);
 	}
 	q_wait = 0;
 }
@@ -296,11 +306,15 @@ int parsing_ofm(int argc, char* argv[]){
 									buf[0] = '/';
 									buf[1] = '\0';
 								}
+								else if(opt.directory[0] != '/' &&opt.directory[0] != '.'){
+									buf[0] = '.';
+									buf[1] = '/';
+								}
 								str = strtok(opt.directory, "/");
 								strcat(buf, str);
 								strcat(buf, "/");
 								if((rst = access(buf, F_OK)) == -1){
-									if((rst = mkdir(buf, 0644)) < 0){
+									if((rst = mkdir(buf, 0755)) < 0){
 										fprintf(stderr, "mkdir() err\n");
 										exit(1);
 									}
@@ -312,7 +326,7 @@ int parsing_ofm(int argc, char* argv[]){
 									strcat(buf, str);
 									strcat(buf, "/");
 									if((rst = access(buf, F_OK)) == -1){
-										if((rst = mkdir(buf, 0644)) < 0){
+										if((rst = mkdir(buf, 0755)) < 0){
 											fprintf(stderr, "mkdir() err\n");
 											exit(1);
 										}
@@ -325,7 +339,10 @@ int parsing_ofm(int argc, char* argv[]){
 									exit(1);
 								}
 								if(S_ISDIR(statbuf.st_mode)){
-									// 맨 끝이 /인지 확인. /가 아니면 추가해준다
+									if(opt.directory[0] != '/' &&opt.directory[0] != '.'){
+										buf[0] = '.';
+										buf[1] = '/';
+									}
 									strcpy(buf, opt.directory);
 									len = strlen(buf);
 									if(buf[len-1] != '/'){
@@ -339,11 +356,15 @@ int parsing_ofm(int argc, char* argv[]){
 										buf[0] = '/';
 										buf[1] = '\0';
 									}
+									else if(opt.directory[0] != '/' &&opt.directory[0] != '.'){
+										buf[0] = '.';
+										buf[1] = '/';
+									}
 									str = strtok(opt.directory, "/");
 									strcat(buf, str);
 									strcat(buf, "/");
 									if((rst = access(buf, F_OK)) == -1){
-										if((rst = mkdir(buf, 0644)) < 0){
+										if((rst = mkdir(buf, 0755)) < 0){
 											fprintf(stderr, "mkdir() err\n");
 											exit(1);
 										}
@@ -355,7 +376,7 @@ int parsing_ofm(int argc, char* argv[]){
 										strcat(buf, str);
 										strcat(buf, "/");
 										if((rst = access(buf, F_OK)) == -1){
-											if((rst = mkdir(buf, 0644)) < 0){
+											if((rst = mkdir(buf, 0755)) < 0){
 												fprintf(stderr, "mkdir() err\n");
 												exit(1);
 											}

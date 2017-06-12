@@ -59,6 +59,8 @@ int main(int argc, char* argv[]){
 
 	ret = sigsetjmp(jmp_buf1, 1);
 	if(ret == 3){
+		close(fd);
+		remove(FIFO_NAME);
 		if((vim = fork()) < 0){
 			// check fork() err
 			kill(pid, SIGUSR2);
@@ -115,8 +117,8 @@ int main(int argc, char* argv[]){
 
 	ret = sigsetjmp(jmp_buf2, 1);
 	if(ret == 2){
-		fprintf(stderr, "can't add queue.");
-		exit(0);
+		fprintf(stderr, "%s is not shared file\n", argv[1]);
+		exit(1);
 	}
 
 	if((rst = access(argv[1], F_OK)) < 0){
