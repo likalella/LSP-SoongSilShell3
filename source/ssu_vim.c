@@ -17,6 +17,7 @@
 struct vim_opt opt;
 sigjmp_buf jmp_buf1;
 sigjmp_buf jmp_buf2;
+char *FIFO_NAME = "ssu_fifofile";
 
 int main(int argc, char* argv[]){
 	int i, j, rst, len, ret, status, fd;
@@ -97,6 +98,7 @@ int main(int argc, char* argv[]){
 				}
 				else if(vim > 0){
 					wait(&status);
+					remove(tmpname);
 				}
 				else{
 					execl("/usr/bin/diff", "diff", tmpname, argv[1], (char*)0);
@@ -198,8 +200,19 @@ int main(int argc, char* argv[]){
 			fprintf(stderr, "kill() to process %d err\n", pid);
 			exit(1);
 		}
+
 		//TODO wirte FIFO
-		
+		mkfifo(FIFO_NAME, 0644);
+		printf("wait reader\n");
+		if((fd = open(FIFO_NAME, O_WRONLY)) < 0){
+			fprintf(stderr, "open() err\n");
+			exit(1);
+		}
+		printf("reader connected\n");
+		if((len = write(fd, argv[1], strlen(argv[1])-1)) == -1){
+			fprintf(stderr, "write() err\n");
+			exit(1);
+		}
 
 		while(1){
 			// 1sec print
